@@ -6,8 +6,6 @@ const isSharedWorker = (
     typeof self !== 'undefined' && 
     self instanceof SharedWorkerGlobalScope);
 
-// const dbs: { [index: number]: IDBSync } = {};
-
 const messagePorts: WeakMap<MessagePort | DedicatedWorkerGlobalScope, { [index: number]: IDBSync }> = new WeakMap();
 
 let spl: ISPLSync = null;

@@ -39,8 +39,8 @@ interface ISplOptions {
         precision: number,
         options: number
     },
-    busyTimeout: number,
-    sharedWorker: boolean
+    busyTimeout?: number,
+    sharedWorker?: boolean
 }
 
 declare const _default: (options?: ISplOptions) => ISPLSync;

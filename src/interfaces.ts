@@ -72,7 +72,8 @@ interface ISplOptions {
         precision: number,
         options: number
     },
-    busyTimeout?: number
+    busyTimeout?: number,
+    sharedWorker?: boolean
 }
 
 export {
