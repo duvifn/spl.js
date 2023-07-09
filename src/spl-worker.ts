@@ -1,12 +1,55 @@
 import SPL from './spl';
 import {ISPLSync, IDBSync} from './interfaces';
 
-const dbs: { [index: number]: IDBSync } = {};
+const isSharedWorker = (
+    typeof SharedWorkerGlobalScope !== 'undefined' && 
+    typeof self !== 'undefined' && 
+    self instanceof SharedWorkerGlobalScope);
+
+// const dbs: { [index: number]: IDBSync } = {};
+
+const messagePorts: WeakMap<MessagePort | DedicatedWorkerGlobalScope, { [index: number]: IDBSync }> = new WeakMap();
+
 let spl: ISPLSync = null;
 const extensions = {};
 
-const exec = (id: number, fn: string, args: [] = []): any => {
+async function init(evt, messagePort: MessagePort | DedicatedWorkerGlobalScope) {
+    const { wasmBinary, exs, options } = evt.data
+    // @ts-ignore
+    const modules = await Promise.all(exs.map(ex => import(ex.url)));
+    exs.forEach((ex, i) => {
+        const module = modules[i];
+        if (ex.extends === 'db') {
+            Object.keys(ex.fns).forEach(fn => {
+                extensions[`db.${fn}`] = module[ex.fns[fn]];
+            });
+        } else if (ex.extends === 'spl') {
+            Object.keys(ex.fns).forEach(fn => {
+                extensions[fn] = module[ex.fns[fn]];
+            });
+        }
+    });
+    spl = SPL(wasmBinary, options);
+    messagePort.postMessage(null);
+}
 
+function unregister(messagePort: MessagePort | DedicatedWorkerGlobalScope) {
+    let dbs: {[index: number]: IDBSync} = messagePorts.get(messagePort);
+    if (!dbs) {
+        dbs = {};
+    }
+    for (const db of Object.values(dbs)) {
+        db.close();
+    }
+    if (messagePorts.has(messagePort)) 
+        messagePorts.delete(messagePort);
+}
+const exec = (messagePort: MessagePort | DedicatedWorkerGlobalScope, id: number, fn: string,  args: [] = []): any => {
+    let dbs = messagePorts.get(messagePort);
+    if (!dbs) {
+        dbs = {};
+        messagePorts.set(messagePort, dbs);
+    }
     let res = null, transferables = [], err = '';
 
     if ((fn.startsWith('db.') || fn.startsWith('res.')) && !(id in dbs)) {
@@ -16,6 +59,9 @@ const exec = (id: number, fn: string, args: [] = []): any => {
     switch (fn) {
         case 'version':
             res = spl.version();
+            break;
+        case 'unregister':
+            unregister(messagePort);
             break;
         case 'db':
             // @ts-ignore
@@ -112,54 +158,48 @@ const exec = (id: number, fn: string, args: [] = []): any => {
 
 };
 
-self.onmessage = function (evt) {
-    if (spl) {
-        const { __id__, id, fn, args } = evt.data;
-        let res = null, transferables = [], err = '';
-        (async () => {
-            try {
-                async function* fnExec() {
-                    let execArgs = Array.isArray(fn) ? fn : [{ id, fn, args }];
-                    for (let execArg of execArgs) {
-                        const { id, fn, args } = execArg;
-                        const [maybePromise, transferables] = exec(id, fn, args);
-                        yield [await maybePromise, transferables];
-                    }
-                };
-                for await (const _res of fnExec()) {
-                    ([res, transferables] = _res);
-                }
-            } catch (error) {
-                err = error.message || error;
-            } finally {
-                if (res instanceof spl.db) {
-                    res = { this: 'db' };
-                } else if (res === spl) {
-                    res = { this: 'spl' };
-                }
-                self.postMessage({ __id__, res, err }, transferables);
-            }
-        })();
-    } else {
-        (async () => {
-            const { wasmBinary, exs, options } = evt.data
-            // @ts-ignore
-            const modules = await Promise.all(exs.map(ex => import(ex.url)));
-            exs.forEach((ex, i) => {
-                const module = modules[i];
-                if (ex.extends === 'db') {
-                    Object.keys(ex.fns).forEach(fn => {
-                        extensions[`db.${fn}`] = module[ex.fns[fn]];
-                    });
-                } else if (ex.extends === 'spl') {
-                    Object.keys(ex.fns).forEach(fn => {
-                        extensions[fn] = module[ex.fns[fn]];
-                    });
-                }
-            });
-            spl = SPL(wasmBinary, options);
-            self.postMessage(null);
-        })();
+const onMessage = async (evt, messagePort: MessagePort | DedicatedWorkerGlobalScope) => {
 
+    if (!spl)
+        return init(evt, messagePort);
+    const { __id__, id, fn, args } = evt.data;
+    let res = null, transferables = [], err = '';
+    try {
+        async function* fnExec() {
+            let execArgs = Array.isArray(fn) ? fn : [{ id, fn, args }];
+            for (let execArg of execArgs) {
+                const { id, fn, args } = execArg;
+                const [maybePromise, transferables] = exec(messagePort, id, fn, args);
+                yield [await maybePromise, transferables];
+            }
+        };
+        for await (const _res of fnExec()) {
+            ([res, transferables] = _res);
+        }
+    } catch (error) {
+        err = error.message || error;
+    } finally {
+        if (res instanceof spl.db) {
+            res = { this: 'db' };
+        } else if (res === spl) {
+            res = { this: 'spl' };
+        }
+        messagePort.postMessage({ __id__, res, err }, transferables);
     }
+}
+
+if (isSharedWorker) {
+    // Register connection 
+    (self as unknown as SharedWorkerGlobalScope).onconnect = function (event) {
+        const port = event.ports[0];
+        
+        port.onmessage = function (evt) {
+            onMessage(evt, port);
+        };
+        
+    };
+} else {
+    self.onmessage = function (evt) {
+        onMessage(evt, self as unknown as DedicatedWorkerGlobalScope);
+    };
 }

@@ -71,7 +71,8 @@ interface ISplOptions {
     autoGeoJSON?: false | {
         precision: number,
         options: number
-    }
+    },
+    busyTimeout?: number
 }
 
 export {

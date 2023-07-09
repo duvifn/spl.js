@@ -69,6 +69,7 @@ const spl = function (wasmBinary=null, options: ISplOptions | {} ={}): ISPLSync 
         sqlite3_bind_int = _emspl.cwrap('sqlite3_bind_int', 'number', ['number', 'number', 'number']),
         sqlite3_bind_null = _emspl.cwrap('sqlite3_bind_null', 'number', ['number', 'number']),
         sqlite3_bind_parameter_index = _emspl.cwrap('sqlite3_bind_parameter_index', 'number', ['number', 'string']),
+        sqlite3_busy_timeout = _emspl.cwrap('sqlite3_busy_timeout', 'number', ['number', 'number']),
         sqlite3_step = _emspl.cwrap('sqlite3_step', 'number', ['number']),
         sqlite3_errmsg = _emspl.cwrap('sqlite3_errmsg', 'string', ['number']),
         sqlite3_column_count = _emspl.cwrap('sqlite3_column_count', 'number', ['number']),
@@ -95,10 +96,10 @@ const spl = function (wasmBinary=null, options: ISplOptions | {} ={}): ISPLSync 
 
         // TODO: save -> return buffer if no path given also in web; fix uncaught in promise; wal mode problem if opened from blob
 
-    this.db = function(sqlite3?: string | ArrayBuffer) {
-
+    this.db = function(sqlite3?: string | ArrayBuffer, dbOptions?: ISplOptions) {
+        dbOptions = dbOptions || options;
         // @ts-ignore
-        if (!new.target) return Object.freeze(new _spl.db(sqlite3, options));
+        if (!new.target) return Object.freeze(new _spl.db(sqlite3, dbOptions));
 
         const _db = this;
         let _result = result();
@@ -477,6 +478,12 @@ const spl = function (wasmBinary=null, options: ISplOptions | {} ={}): ISPLSync 
             cache = spatialite_alloc_connection();
             spatialite_init_ex(dbHandle, cache, false);
             sqlite3_stats_init(dbHandle, 0, 0);
+            if (dbOptions.busyTimeout !== undefined) {
+                if (sqlite3_busy_timeout(dbHandle, dbOptions.busyTimeout) !== SQLITE.OK ) {
+                    throw new Error(
+                        `Couldn't set busy timeout. Given timeout value was ${dbOptions.busyTimeout}`);
+                }
+            }
         } else {
             throw new Error(sqlite3_errmsg(dbHandle));
         }

@@ -7,7 +7,8 @@ const workerURL= URL.createObjectURL(new Blob([pako.inflate(Uint8Array.from(atob
 const wasmBinary = pako.inflate(Uint8Array.from(atob(wasmStr), c => c.charCodeAt(0))).buffer;
 
 const worker = (exs=[], options) => {
-    return new Promise<Worker>((resolve, reject) => {
+    options = options || {};
+    return new Promise<Worker | SharedWorker>((resolve, reject) => {
         exs = exs.reduce((exs, ex) => {
             if (ex.url) {
                 return [...exs, ex];
@@ -23,27 +24,29 @@ const worker = (exs=[], options) => {
                 })];
             }
         }, []);
-        const worker = new Worker(workerURL);
-        worker.onmessage = () => {
+        const workerConstructor = options.sharedWorker ? SharedWorker : Worker;
+        const worker = new workerConstructor(workerURL);
+        const port: MessagePort | Worker = options.sharedWorker ? (worker as SharedWorker).port : worker as Worker;
+        port.onmessage = () => {
             resolve(worker);
         };
         worker.onerror = (err) => {
             reject(err.message)
         };
-        worker.postMessage({ wasmBinary, exs, options });
+        port.postMessage({ wasmBinary, exs, options });
     });
 };
 
 
-const spl = function (wkr: Worker, exs=[]): ISPL {
+const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
 
     // @ts-ignore
     if (!new.target) return new spl(wkr, exs);
 
     const queue: {[index: number]: { resolve: Function, reject: Function }} = {};
     const stackSpl = [];
-
-    wkr.onmessage = (evt) => {
+    const port: MessagePort | Worker = wkr instanceof SharedWorker ? wkr.port : wkr;
+    port.onmessage = (evt) => {
         const { __id__, res, err } = evt.data;
         err ? queue[__id__].reject(err) : queue[__id__].resolve(res);
         delete queue[__id__];
@@ -66,7 +69,7 @@ const spl = function (wkr: Worker, exs=[]): ISPL {
                     (reject || _reject)(err);
                 }
             };
-            wkr.postMessage(msg);
+            port.postMessage(msg);
         });
     };
 
@@ -282,7 +285,17 @@ const spl = function (wkr: Worker, exs=[]): ISPL {
         return thenSpl();
     };
 
-    this.terminate = () => wkr.terminate();
+    this.terminate = () => {
+        if (wkr instanceof Worker) {
+            wkr.terminate();
+        } else {
+            stackSpl.push({
+                fn: 'unregister',
+                args: []
+            });
+            return thenSpl();
+        }
+    }
 
     exs.filter(ex => ex.extends === 'spl').forEach(ex => {
         Object.keys(ex.fns).forEach(fn => {
