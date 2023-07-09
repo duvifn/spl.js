@@ -12,6 +12,7 @@ let spl: ISPLSync = null;
 const extensions = {};
 
 async function init(evt, messagePort: MessagePort | DedicatedWorkerGlobalScope) {
+    //console.log(messagePort, evt);
     const { wasmBinary, exs, options } = evt.data
     // @ts-ignore
     const modules = await Promise.all(exs.map(ex => import(ex.url)));
@@ -41,6 +42,7 @@ function unregister(messagePort: MessagePort | DedicatedWorkerGlobalScope) {
     }
     if (messagePorts.has(messagePort)) 
         messagePorts.delete(messagePort);
+    return {};
 }
 const exec = (messagePort: MessagePort | DedicatedWorkerGlobalScope, id: number, fn: string,  args: [] = []): any => {
     let dbs = messagePorts.get(messagePort);
@@ -59,7 +61,10 @@ const exec = (messagePort: MessagePort | DedicatedWorkerGlobalScope, id: number,
             res = spl.version();
             break;
         case 'unregister':
-            unregister(messagePort);
+            res = unregister(messagePort);
+            break;
+        case 'close':
+            self.close();
             break;
         case 'db':
             // @ts-ignore
@@ -185,12 +190,11 @@ const onMessage = async (evt, messagePort: MessagePort | DedicatedWorkerGlobalSc
         messagePort.postMessage({ __id__, res, err }, transferables);
     }
 }
-
+console.log("isSharedWorker", isSharedWorker);
 if (isSharedWorker) {
     // Register connection 
     (self as unknown as SharedWorkerGlobalScope).onconnect = function (event) {
         const port = event.ports[0];
-        
         port.onmessage = function (evt) {
             onMessage(evt, port);
         };

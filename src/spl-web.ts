@@ -80,7 +80,7 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
                     return post({
                         fn: stackSpl.splice(0)
                     }, res => {
-                        if (typeof(res) === 'object' && res.this === 'spl') {
+                        if (res !== null && typeof(res) === 'object' && res.this === 'spl') {
                             this.then = this;
                             resolve(this);
                         } else {
@@ -285,15 +285,30 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
         return thenSpl();
     };
 
-    this.terminate = () => {
+    this.terminate = (closeShared: boolean = false) => {
         if (wkr instanceof Worker) {
             wkr.terminate();
+        } else if (closeShared) {
+            const msg = {
+                fn: 'close',
+                args: [],
+                __id__: Math.max(-1, ...Object.keys(queue).map(id => +id)) + 1
+            };
+            // Post immediately (don't chain it to previous ones)
+            post(msg, (res) => {}, (err) => {});
+            wkr.onerror = undefined;
+            port.onmessage = undefined;
+            const properties = Object.getOwnPropertyNames(queue);
+            for (const prop of properties) {
+                queue[prop].reject("Shared worker has closed.");
+            }
+            return;
         } else {
             stackSpl.push({
                 fn: 'unregister',
                 args: []
             });
-            return thenSpl();
+            thenSpl();
         }
     }
 
