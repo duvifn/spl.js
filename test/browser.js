@@ -397,3 +397,78 @@ tape('shared worker extensions', async t => {
     spl.terminate(true);
 
 });
+
+tape('shared worker concurrent read', async t => {
+    // We have to wait to be sure that SharedWorker from previous test has
+    // terminated because otherwise no new worker would be created.
+    // To my knowledge, there is no other way to ensure that.
+    await new Promise((resolve, reject) => setTimeout(resolve, 1000));
+   
+    const spl = await SPL(undefined, {sharedWorker: true});
+
+    const db = spl.db('/test');
+    const ii = 100;
+
+    let script = `
+        SELECT InitSpatialMetaData(1);
+        CREATE TABLE large (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT);
+        SELECT AddGeometryColumn('large', 'geometry', 4326, 'GEOMETRY', 'XY');
+    `;
+
+    const geom = `{
+        "type":"Polygon",
+        "coordinates":[[[35.172522345781324,31.807637007387367],[35.1730225777626,31.807379406789376],[35.17296088695526,31.807292779878278],[35.17246065497398,31.807550380717725],[35.172522345781324,31.807637007387367]]]
+    }`;
+    const values = []
+
+    for (let i = 0; i < ii; ++i) {
+        script += `\nINSERT INTO large (geometry) VALUES (SetSRID(GeomFromGeoJSON('${geom}'), 4326));`;
+        values.push(geom)
+    }
+
+    await db.read(script);
+    t.equals(await db.exec('SELECT count(*) FROM large').get.first, ii);
+
+    await db.exec(`INSERT OR REPLACE INTO large (geometry) VALUES (SetSRID(GeomFromGeoJSON(?), 4326))`, values)
+    t.equals(await db.exec('SELECT count(*) FROM large').get.first, 2 * ii);
+
+    const spl2 = await SPL(undefined, {sharedWorker: true});
+    const db2 = spl2.db('/test');
+    t.equals(await db2.exec('SELECT count(*) FROM large').get.first, 2 * ii);
+    spl.terminate(true);
+});
+
+tape('shared worker concurrent write throws', async t => {
+    // We have to wait to be sure that SharedWorker from previous test has
+    // terminated because otherwise no new worker would be created.
+    // To my knowledge, there is no other way to ensure that.
+    await new Promise((resolve, reject) => setTimeout(resolve, 1000));
+   
+    const spl = await SPL(undefined, {sharedWorker: true});
+
+    const db = spl.db('/test');
+
+    let script = `
+        SELECT InitSpatialMetaData(1);
+        CREATE TABLE large (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT);
+        SELECT AddGeometryColumn('large', 'geometry', 4326, 'GEOMETRY', 'XY');
+        BEGIN IMMEDIATE;
+    `;
+    await db.read(script);
+    const spl2 = await SPL(undefined, {sharedWorker: true});
+    const db2 = spl2.db('/test');
+    t.plan(1);
+    try {
+        await db2.exec('BEGIN IMMEDIATE;');
+        t.fail("DB should be lock");
+    } catch (err) {
+        console.log(err);
+        t.equals(err, "database is locked");
+    }
+    
+    t.end();
+    spl.terminate(true);
+        
+    
+    
+});

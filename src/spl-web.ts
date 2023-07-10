@@ -3,11 +3,31 @@ import workerStr from './build/js/worker.str.js';
 import wasmStr from './build/js/wasm.str.js';
 import result from './result.js';
 import { IDB, IMountOption, ISPL, ISplOptions } from './interfaces.js';
+
 const workerURL= URL.createObjectURL(new Blob([pako.inflate(Uint8Array.from(atob(workerStr), c => c.charCodeAt(0)), { to: 'string' })], { type: 'text/javascript' }));
 const wasmBinary = pako.inflate(Uint8Array.from(atob(wasmStr), c => c.charCodeAt(0))).buffer;
 
-const worker = (exs=[], options) => {
+async function digestName(name: string) {
+    const msgUint8 = new TextEncoder().encode(name); 
+    const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8); 
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join(""); // convert bytes to hex string
+    return hashHex;
+  }
+let defaultSharedWorkerName: string;
+
+const worker = async (exs=[], options) => {
     options = options || {};
+
+    // Compute only when required
+    if (options.sharedWorker && 
+        !options.sharedWorkerName && 
+        !defaultSharedWorkerName) {
+
+        defaultSharedWorkerName = await digestName(workerStr + wasmStr);
+    }
     return new Promise<Worker | SharedWorker>((resolve, reject) => {
         exs = exs.reduce((exs, ex) => {
             if (ex.url) {
@@ -24,8 +44,10 @@ const worker = (exs=[], options) => {
                 })];
             }
         }, []);
+
         const workerConstructor = options.sharedWorker ? SharedWorker : Worker;
-        const worker = new workerConstructor(workerURL);
+        const workerName = options.sharedWorkerName ? options.sharedWorkerName : defaultSharedWorkerName;
+        const worker = new workerConstructor(workerURL,  workerName);
         const port: MessagePort | Worker = options.sharedWorker ? (worker as SharedWorker).port : worker as Worker;
         port.onmessage = () => {
             resolve(worker);
