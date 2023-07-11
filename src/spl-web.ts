@@ -321,7 +321,7 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
             port.onmessage = undefined;
             const properties = Object.getOwnPropertyNames(queue);
             for (const prop of properties) {
-                queue[prop].reject("Shared worker has closed.");
+                queue[prop].reject("Shared worker was closed.");
             }
             return;
         } else {

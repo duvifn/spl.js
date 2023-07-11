@@ -461,7 +461,7 @@ tape('shared worker concurrent write throws', async t => {
     t.plan(1);
     try {
         await db2.exec('BEGIN IMMEDIATE;');
-        t.fail("DB should be lock");
+        t.fail("DB should be locked");
     } catch (err) {
         t.equals(err, "database is locked");
     }
