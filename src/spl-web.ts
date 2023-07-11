@@ -46,7 +46,7 @@ const worker = async (exs=[], options) => {
 
         const workerConstructor = options.sharedWorker ? SharedWorker : Worker;
         const workerName = options.sharedWorkerName ? options.sharedWorkerName : defaultSharedWorkerName;
-        const worker = new workerConstructor(workerURL,  workerName);
+        const worker = new workerConstructor(workerURL,  {name: workerName});
         const port: MessagePort | Worker = options.sharedWorker ? (worker as SharedWorker).port : worker as Worker;
         port.onmessage = () => {
             resolve(worker);
