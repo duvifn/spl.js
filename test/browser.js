@@ -455,6 +455,7 @@ tape('shared worker concurrent write throws', async t => {
         BEGIN IMMEDIATE;
     `;
     await db.read(script);
+
     const spl2 = await SPL(undefined, {sharedWorker: true});
     const db2 = spl2.db('/test');
     t.plan(1);

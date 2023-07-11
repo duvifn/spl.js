@@ -25,7 +25,6 @@ const worker = async (exs=[], options) => {
     if (options.sharedWorker && 
         !options.sharedWorkerName && 
         !defaultSharedWorkerName) {
-
         defaultSharedWorkerName = await digestName(workerStr + wasmStr);
     }
     return new Promise<Worker | SharedWorker>((resolve, reject) => {

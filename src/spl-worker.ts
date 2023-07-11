@@ -162,6 +162,10 @@ const onMessage = async (evt, messagePort: MessagePort | DedicatedWorkerGlobalSc
 
     if (!spl)
         return init(evt, messagePort);
+    if (evt.data?.wasmBinary && isSharedWorker) {
+        // This is second intialization of a shared worker
+        return messagePort.postMessage(null);
+    }
     const { __id__, id, fn, args } = evt.data;
     let res = null, transferables = [], err = '';
     try {
