@@ -7,20 +7,24 @@ import { IDB, IMountOption, ISPL, ISplOptions } from './interfaces.js';
 const workerURL= URL.createObjectURL(new Blob([pako.inflate(Uint8Array.from(atob(workerStr), c => c.charCodeAt(0)), { to: 'string' })], { type: 'text/javascript' }));
 const wasmBinary = pako.inflate(Uint8Array.from(atob(wasmStr), c => c.charCodeAt(0))).buffer;
 
+const jsToDataUri = (data: string): string => {
+    return 'data:text/javascript;base64,' + btoa(data);
+}; 
+
 async function digestName(name: string) {
     const msgUint8 = new TextEncoder().encode(name); 
-    const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8); 
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8); 
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hashHex = hashArray
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join(""); // convert bytes to hex string
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
     return hashHex;
   }
 let defaultSharedWorkerName: string;
 
 const worker = async (exs=[], options) => {
     options = options || {};
-
+    
     // Compute only when required
     if (options.sharedWorker && 
         !options.sharedWorkerName && 
@@ -33,9 +37,17 @@ const worker = async (exs=[], options) => {
                 return [...exs, ex];
             } else {
                 return [...exs, ...Object.keys(ex.fns).map(fn => {
+                    const script = `export default ${ex.fns[fn].toString()}`;
+                    let exUri: string;
+                    if (options.sharedWorker) {
+                        // TODO: for very large extension, deflate and inflate in worker side
+                        exUri = jsToDataUri(script);
+                    } else {
+                        exUri = URL.createObjectURL(new Blob([script], { type: 'text/javascript' }));
+                    }
                     const ex_ = {
                         extends: ex.extends,
-                        url: URL.createObjectURL(new Blob([`export default ${ex.fns[fn].toString()}`], { type: 'text/javascript' })),
+                        url: exUri,
                         fns: {}
                     };
                     ex_.fns[fn] = 'default';
@@ -46,7 +58,14 @@ const worker = async (exs=[], options) => {
 
         const workerConstructor = options.sharedWorker ? SharedWorker : Worker;
         const workerName = options.sharedWorkerName ? options.sharedWorkerName : defaultSharedWorkerName;
-        const worker = new workerConstructor(workerURL,  {name: workerName});
+        let workerScriptUrl: string;
+        if (options.sharedWorker) {
+            workerScriptUrl = jsToDataUri(pako.inflate(Uint8Array.from(atob(workerStr), c => c.charCodeAt(0)), { to: 'string' }));
+        } else {
+            workerScriptUrl = workerURL;
+        }
+        
+        const worker = new workerConstructor(workerScriptUrl,  {name: workerName});
         const port: MessagePort | Worker = options.sharedWorker ? (worker as SharedWorker).port : worker as Worker;
         port.onmessage = () => {
             resolve(worker);

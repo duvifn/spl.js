@@ -343,7 +343,7 @@ tape('shared worker extensions', async t => {
     // We have to wait to be sure that SharedWorker from previous test has
     // terminated because otherwise no new worker would be created.
     // To my knowledge, there is no other way to ensure that.
-    await new Promise((resolve, reject) => setTimeout(resolve, 1000));
+    await new Promise((resolve, reject) => setTimeout(resolve, 2000));
     const extensions = [
         {
             extends: 'db',
@@ -402,7 +402,7 @@ tape('shared worker concurrent read', async t => {
     // We have to wait to be sure that SharedWorker from previous test has
     // terminated because otherwise no new worker would be created.
     // To my knowledge, there is no other way to ensure that.
-    await new Promise((resolve, reject) => setTimeout(resolve, 1000));
+    await new Promise((resolve, reject) => setTimeout(resolve, 2000));
    
     const spl = await SPL(undefined, {sharedWorker: true});
 
