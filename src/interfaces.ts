@@ -73,7 +73,8 @@ interface ISplOptions {
         options: number
     },
     busyTimeout?: number,
-    sharedWorker?: boolean
+    sharedWorker?: boolean,
+    workerURL?: string
 }
 
 export {

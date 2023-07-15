@@ -59,7 +59,9 @@ const worker = async (exs=[], options) => {
         const workerConstructor = options.sharedWorker ? SharedWorker : Worker;
         const workerName = options.sharedWorkerName ? options.sharedWorkerName : defaultSharedWorkerName;
         let workerScriptUrl: string;
-        if (options.sharedWorker) {
+        if (options.workerURL) {
+            workerScriptUrl = options.workerURL;
+        } else if (options.sharedWorker) {
             workerScriptUrl = jsToDataUri(pako.inflate(Uint8Array.from(atob(workerStr), c => c.charCodeAt(0)), { to: 'string' }));
         } else {
             workerScriptUrl = workerURL;

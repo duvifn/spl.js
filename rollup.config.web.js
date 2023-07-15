@@ -15,6 +15,12 @@ const cp = copy({
     ]
 });
 
+const cpWorker = copy({
+    targets: [
+        { src: 'src/build/js/worker.js', dest: 'dist' }
+    ]
+});
+
 export default args => ({
     input: 'src/spl-web.ts',
     output: [
@@ -25,13 +31,15 @@ export default args => ({
         json(),
         ts,
         commonjs(),
-        cp
+        cp,
+        cpWorker
     ] : [
         nodeResolve(),
         json(),
         ts,
         commonjs(),
         terser(),
-        cp
+        cp,
+        cpWorker
     ]
 });
