@@ -346,11 +346,20 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
             }
             return;
         } else {
-            stackSpl.push({
+            const msg = {
                 fn: 'unregister',
-                args: []
-            });
-            thenSpl();
+                args: [],
+                __id__: Math.max(-1, ...Object.keys(queue).map(id => +id)) + 1
+            };
+            // Post immediately (don't chain it to previous ones)
+            post(msg, (res) => {}, (err) => {});
+            wkr.onerror = undefined;
+            port.onmessage = undefined;
+            const properties = Object.getOwnPropertyNames(queue);
+            for (const prop of properties) {
+                queue[prop].reject("Shared worker was closed.");
+            }
+            return;
         }
     }
 

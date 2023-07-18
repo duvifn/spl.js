@@ -149,6 +149,9 @@ const exec = (messagePort: MessagePort | DedicatedWorkerGlobalScope, id: number,
             if (fn in extensions) {
                 const that = fn.startsWith('db.') ? dbs[id] : spl;
                 res = extensions[fn](that, ...args);
+                if (res instanceof ArrayBuffer) {
+                    transferables.push(res);
+                }
             } else {
                 throw new Error(`Unkown function '${fn}'`);
             }
