@@ -149,11 +149,6 @@ const exec = (messagePort: MessagePort | DedicatedWorkerGlobalScope, id: number,
             if (fn in extensions) {
                 const that = fn.startsWith('db.') ? dbs[id] : spl;
                 res = extensions[fn](that, ...args);
-                if (res && (res instanceof ArrayBuffer || 
-                            res.buffer instanceof ArrayBuffer)) {
-                    const buffer = res instanceof ArrayBuffer ? res : res.buffer;
-                    transferables.push(buffer);
-                }
             } else {
                 throw new Error(`Unkown function '${fn}'`);
             }
@@ -192,6 +187,11 @@ const onMessage = async (evt, messagePort: MessagePort | DedicatedWorkerGlobalSc
             res = { this: 'db' };
         } else if (res === spl) {
             res = { this: 'spl' };
+        }
+        if (res && (res instanceof ArrayBuffer || 
+                    res.buffer instanceof ArrayBuffer)) {
+            const buffer = res instanceof ArrayBuffer ? res : res.buffer;
+            transferables.push(buffer);
         }
         messagePort.postMessage({ __id__, res, err }, transferables);
     }
