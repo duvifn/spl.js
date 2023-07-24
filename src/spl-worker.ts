@@ -1,5 +1,6 @@
 import SPL from './spl';
 import {ISPLSync, IDBSync} from './interfaces';
+import splVersion from "./build/js/version.js";
 
 const isSharedWorker = (
     typeof SharedWorkerGlobalScope !== 'undefined' && 
@@ -159,7 +160,14 @@ const exec = (messagePort: MessagePort | DedicatedWorkerGlobalScope, id: number,
 };
 
 const onMessage = async (evt, messagePort: MessagePort | DedicatedWorkerGlobalScope) => {
-
+    const incomingVersion = evt.data?.splVersion;
+    if (incomingVersion !== splVersion) {
+        return messagePort.postMessage({
+            __id__: evt.data?.__id__, 
+            res: null, 
+            err: `Client and worker spl versions are different: Client: ${incomingVersion}. Worker: ${splVersion}` 
+        });
+    }
     if (!spl)
         return init(evt, messagePort);
     if (evt.data?.wasmBinary && isSharedWorker) {

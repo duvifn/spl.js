@@ -1,6 +1,7 @@
 import * as pako from 'pako';
 import workerStr from './build/js/worker.str.js';
 import wasmStr from './build/js/wasm.str.js';
+import splVersion from "./build/js/version.js";
 import result from './result.js';
 import { IDB, IMountOption, ISPL, ISplOptions } from './interfaces.js';
 
@@ -11,26 +12,11 @@ const jsToDataUri = (data: string): string => {
     return 'data:text/javascript;base64,' + btoa(data);
 }; 
 
-async function digestName(name: string) {
-    const msgUint8 = new TextEncoder().encode(name); 
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8); 
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    return hashHex;
-  }
-let defaultSharedWorkerName: string;
+
 
 const worker = async (exs=[], options) => {
     options = options || {};
     
-    // Compute only when required
-    if (options.sharedWorker && 
-        !options.sharedWorkerName && 
-        !defaultSharedWorkerName) {
-        defaultSharedWorkerName = await digestName(workerStr + wasmStr);
-    }
     return new Promise<Worker | SharedWorker>((resolve, reject) => {
         exs = exs.reduce((exs, ex) => {
             if (ex.url) {
@@ -57,7 +43,7 @@ const worker = async (exs=[], options) => {
         }, []);
 
         const workerConstructor = options.sharedWorker ? SharedWorker : Worker;
-        const workerName = options.sharedWorkerName ? options.sharedWorkerName : defaultSharedWorkerName;
+        const workerName = options.sharedWorkerName;
         let workerScriptUrl: string;
         if (options.workerURL) {
             workerScriptUrl = options.workerURL;
@@ -75,7 +61,7 @@ const worker = async (exs=[], options) => {
         worker.onerror = (err) => {
             reject(err.message)
         };
-        port.postMessage({ wasmBinary, exs, options });
+        port.postMessage({ wasmBinary, exs, options, splVersion });
     });
 };
 
@@ -103,6 +89,7 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
     const post = (msg, resolve?: Function, reject?: Function): Promise<any> => {
         return new Promise((_resolve, _reject) => {
             msg.__id__ = Math.max(-1, ...Object.keys(queue).map(id => +id)) + 1;
+            msg.splVersion = splVersion;
             queue[msg.__id__] = {
                 resolve: res => {
                     (resolve || _resolve)(res);

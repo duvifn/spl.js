@@ -6619,6 +6619,8 @@ const spl$1 = function (wasmBinary = null, options = {}) {
     };
 };
 
+const splVersion = "0.1.0-beta.9";
+
 const isSharedWorker = (typeof SharedWorkerGlobalScope !== 'undefined' &&
     typeof self !== 'undefined' &&
     self instanceof SharedWorkerGlobalScope);
@@ -6768,6 +6770,14 @@ const exec = (messagePort, id, fn, args = []) => {
     return [res, transferables];
 };
 const onMessage = async (evt, messagePort) => {
+    const incomingVersion = evt.data?.splVersion;
+    if (incomingVersion !== splVersion) {
+        return messagePort.postMessage({
+            __id__: evt.data?.__id__,
+            res: null,
+            err: `Client and worker spl versions are different: Client: ${incomingVersion}. Worker: ${splVersion}`
+        });
+    }
     if (!spl)
         return init(evt, messagePort);
     if (evt.data?.wasmBinary && isSharedWorker) {
@@ -6799,6 +6809,11 @@ const onMessage = async (evt, messagePort) => {
         }
         else if (res === spl) {
             res = { this: 'spl' };
+        }
+        if (res && (res instanceof ArrayBuffer ||
+            res.buffer instanceof ArrayBuffer)) {
+            const buffer = res instanceof ArrayBuffer ? res : res.buffer;
+            transferables.push(buffer);
         }
         messagePort.postMessage({ __id__, res, err }, transferables);
     }
