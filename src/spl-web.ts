@@ -5,14 +5,13 @@ import splVersion from "./build/js/version.js";
 import result from './result.js';
 import { IDB, IMountOption, ISPL, ISplOptions } from './interfaces.js';
 
+let GLOBAL_ID = 0;
 const workerURL= URL.createObjectURL(new Blob([pako.inflate(Uint8Array.from(atob(workerStr), c => c.charCodeAt(0)), { to: 'string' })], { type: 'text/javascript' }));
 const wasmBinary = pako.inflate(Uint8Array.from(atob(wasmStr), c => c.charCodeAt(0))).buffer;
 
 const jsToDataUri = (data: string): string => {
     return 'data:text/javascript;base64,' + btoa(data);
 }; 
-
-
 
 const worker = async (exs=[], options) => {
     options = options || {};
@@ -88,7 +87,7 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
 
     const post = (msg, resolve?: Function, reject?: Function): Promise<any> => {
         return new Promise((_resolve, _reject) => {
-            msg.__id__ = Math.max(-1, ...Object.keys(queue).map(id => +id)) + 1;
+            msg.__id__ = ++GLOBAL_ID;
             msg.splVersion = splVersion;
             queue[msg.__id__] = {
                 resolve: res => {
@@ -147,8 +146,15 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
             if (this.then === this) {
                 this.then = (resolve: Function, reject: Function) => {
                     if (stackDB.length) {
+                        const jobs = [stackDB.shift()];
+                        const firstIsRunAlone = jobs[0].runAlone;
+                        while (stackDB.length && 
+                              !stackDB[0].runAlone && 
+                              !firstIsRunAlone) {
+                            jobs.push(stackDB.shift());
+                        }
                         return post({
-                            fn: stackDB.splice(0)
+                            fn: jobs
                         }, res => {
                             if (typeof(res) === 'object' && res.this === 'db') {
                                 this.then = this;
@@ -158,7 +164,11 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
                             } else {
                                 resolve(res);
                             }
-                        }, reject);
+                        }, reject).finally(() => {
+                            if (stackDB.length && this.then) {
+                                return this.then(resolve, reject);
+                            }
+                        });
                     } else {
                         this.then = this;
                         resolve(this);
@@ -274,6 +284,7 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
                     const fn = `db.${fn_}`;
                     this[fn_]  = (...args) => (fn => {
                         stackDB.push({
+                            runAlone: ex.runAlone,
                             id,
                             fn,
                             args
@@ -321,7 +332,7 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
             const msg = {
                 fn: 'close',
                 args: [],
-                __id__: Math.max(-1, ...Object.keys(queue).map(id => +id)) + 1
+                __id__: ++GLOBAL_ID
             };
             // Post immediately (don't chain it to previous ones)
             post(msg, (res) => {}, (err) => {});
@@ -336,7 +347,7 @@ const spl = function (wkr: Worker | SharedWorker, exs=[]): ISPL {
             const msg = {
                 fn: 'unregister',
                 args: [],
-                __id__: Math.max(-1, ...Object.keys(queue).map(id => +id)) + 1
+                __id__: ++GLOBAL_ID
             };
             // Post immediately (don't chain it to previous ones)
             post(msg, (res) => {}, (err) => {});
